@@ -1,5 +1,5 @@
 # bfbasic
-This is a GitHub repository for [BFBASIC](https://esolangs.org/wiki/BFBASIC).
+This is a por to Eclipse and GitHub of [BFBASIC](https://esolangs.org/wiki/BFBASIC).
 
 I created this repository because the original project on SourceForge seems to be closed and its [CVS repository](http://brainfuck.cvs.sourceforge.net/brainfuck/) being available only in read-only mode.
 
