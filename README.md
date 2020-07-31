@@ -1,5 +1,5 @@
 # bfbasic
-This is a port to Eclipse and GitHub of [BFBASIC](https://esolangs.org/wiki/BFBASIC).
+This is a port to Eclipse and GitHub of [BFBASIC](https://esolangs.org/wiki/BFBASIC), a compiler that compiles BASIC into [BrainFuck](https://esolangs.org/wiki/Brainfuck) code.
 
 I created this repository because the original project on SourceForge seems to be closed and its [CVS repository](http://brainfuck.cvs.sourceforge.net/brainfuck/) being available only in read-only mode.
 
@@ -26,3 +26,4 @@ bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
 ```
 
 Please notce that you need [Java](https://java.com/en/download/) installed on your machine in order to run BFBASIC.
+In addition, you will need a [BrainFuck compiler or iterpreter](https://esolangs.org/wiki/Brainfuck_implementations) to execute the generated BrainFuck code.
