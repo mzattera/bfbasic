@@ -2,7 +2,7 @@
 // BFBASIC -- Basic programming language compiler for BF
 // Filename : bfbasic.java
 // Language : Java 1.2+
-// Version  : 1.41
+// Version  : 1.50 rc2
 // Copyright: (C) 2001-2005 Jeffry Johnston
 //
 // This program is free software; you can redistribute it and/or
@@ -11,6 +11,25 @@
 // for more details.
 //
 // Version history.  See bfbasic.txt for more information:
+// 1.50    10 Jul 2005 [Jon] (Release candidate 2)
+//   * Fixed bug in CASE handling which prevented compiling
+//     on some implementations
+// 1.50    09 Jul 2005 [Jon] (Release candidate 1)
+//   * Added -t prints $var=cell line for bfdebug
+//   * Added FOR...STEP (for -ve STEP use 0-#)
+//   * Added SELECT CASE flow control, can be nested
+//     SELECT CASE expr, CASE expr, END SELECT, EXIT SELECT
+//   * Added INCLUDE for inline compilation of external files
+//   * Added LIBRARY to INCLUDE libraries at end of program
+//   * Change: Display filename on compile error
+//   * Line number correct for current file
+// 1.42    30 Jun 2005 [Jeff]
+//   * Added --?, --help, /? (same as -?)
+//   * Added -dd (same as -D)
+//   * Added -ddd, purely debug mode
+//   * -dd and -ddd do not print @ as last char of file
+//   * Changed default extension to .b instead of .bf
+//   * -ddd prints $var=cell line for bfdebug
 // 1.41    29 Jun 2005
 // 1.40    17 Mar 2005
 // 1.30    30 Oct 2003
@@ -42,27 +61,32 @@ import java.util.Stack;
 // bfbasic
 //********************************************************************
 public class bfbasic {
-  public static final String VERSION = "1.41";
-  
+  public static final String VERSION = "1.50 rc2";
+
   static final int WRAP_DEFAULT = 72;
 
-  static boolean _debug = false, _extraDebug = false, 
-                 _insert = false, _crlf = false,
-                 _needPre = true, _needPost = false;
-  static BufferedReader _in; 
+  static boolean _insert = false, _crlf = false,
+                 _needPre = true, _needPost = false,
+		 _vartable = false;
+  /**
+   * 0: none, 1: -d, 2: -dd, 3: -ddd
+   */
+  static int _debug = 0;
+  static BufferedReader _in;
   static PrintStream _out;
-  static StringWriter _tempString = new StringWriter(); 
-  static PrintWriter _tempOut = new PrintWriter(_tempString); 
+  static StringWriter _tempString = new StringWriter();
+  static PrintWriter _tempOut = new PrintWriter(_tempString);
   static LinkedHashMap _var = new LinkedHashMap(), 
                        _label = new LinkedHashMap();
   static int _line = 0, _wrapWidth = 0, _optLevel = 2;
-  static String _p = "", _sourceLine = "";
+  static String _p = "", _sourceLine = "", _curfile = "";
   static char _a;
   static Stack _doStack = new Stack(), _forStack = new Stack(),
                _forTopStack = new Stack(), _forStepStack = new Stack(),
-               _ifStack = new Stack();
-  static int _annex = 1, _doAnnex = 1, _ifAnnex = 1, _forAnnex = 1, 
-             _gosubAnnex = 0;
+               _ifStack = new Stack(), _caseStack = new Stack(),
+	       _caseDepthStack = new Stack(), _libraryStack = new Stack();
+  static int _annex = 1, _doAnnex = 1, _ifAnnex = 1, _forAnnex = 1,
+             _gosubAnnex = 0, _selectAnnex = 1;
 
   //------------------------------------------------------------------
   // main
@@ -77,18 +101,23 @@ public class bfbasic {
     int n;
     for (n = 0; ; n++) {
       try {
-        if (cmdline[n].equals("-?") || cmdline[n].equals("-h") ) {
+        if (cmdline[n].equals("-?") || cmdline[n].equals("--?") 
+            || cmdline[n].equals("/?") || cmdline[n].equals("--help")
+            || cmdline[n].equals("-h")) { // help
           usage();
           System.exit(0);
         } else if (cmdline[n].equals("-c")) { // crlf
           _crlf = true;
         } else if (cmdline[n].equals("-d")) { // debug output
           _wrapWidth = WRAP_DEFAULT;
-          _debug = true;
-        } else if (cmdline[n].equals("-D")) { // verbose debug output
+          _debug = 1;
+        } else if (cmdline[n].equals("-dd")
+                   || cmdline[n].equals("-D")) { // verbose debug output
           _wrapWidth = WRAP_DEFAULT;
-          _debug = true;
-          _extraDebug = true;
+          _debug = 2;
+        } else if (cmdline[n].equals("-ddd")) { // purely debug output
+          _wrapWidth = WRAP_DEFAULT;
+          _debug = 3;
         } else if (cmdline[n].equals("-O1")) { // optimization level
           _optLevel = 1;
         } else if (cmdline[n].equals("-O2")) { // optimization level
@@ -99,9 +128,11 @@ public class bfbasic {
           try {
             f2 = cmdline[n + 1];
           } catch (ArrayIndexOutOfBoundsException e) {
-            errout("Error: Missing output filename"); 
+            errout("Error: Missing output filename");
           }
           n++;
+       } else if (cmdline[n].equals("-t")) { // table
+          _vartable = true;
         } else if (cmdline[n].equals("-w")) {
           _wrapWidth = WRAP_DEFAULT;
           String width = null;
@@ -118,14 +149,14 @@ public class bfbasic {
               n++;
             } catch (NumberFormatException e) {
             }  
-          }
+          }System.out.println();
         } else if (cmdline[n].startsWith("-")) {
           errout("Error: Unrecognized option: " + cmdline[n]);
         } else {
           if (f == "")
             f = cmdline[n];
           else if (f2 == "")
-            f2 = cmdline[n]; 
+            f2 = cmdline[n];
         }
       } catch (ArrayIndexOutOfBoundsException e) {
         break;
@@ -137,12 +168,13 @@ public class bfbasic {
     }
     if ((n = f.indexOf('.')) == -1) {
       // create default output filename
-      if (f2.equals("")) { f2 = f + ".bf"; }
+      if (f2.equals("")) { f2 = f + ".b"; }
       // add missing ".bas" extension
       f += ".bas";
+      _curfile = f;
     } else {
       // create default output filename
-      if (f2.equals("")) { f2 = f.substring(0, n) + ".bf"; }
+      if (f2.equals("")) { f2 = f.substring(0, n) + ".b"; }
     }
 
     // display filenames
@@ -168,7 +200,7 @@ public class bfbasic {
 
     // output banner
     _out.print("[ BF Code Produced by BFBASIC " + VERSION);
-    if (_debug) { _out.print(" (debug comments)"); }
+    if (_debug > 0) { _out.print(" (debug comments)"); }
     _out.println(" ]");
 
     // add reserved variables
@@ -183,7 +215,45 @@ public class bfbasic {
     first();
 
     // main loop
-    while (true) {
+    compile(f,_in);
+
+    //include libraries
+    while (!_libraryStack.empty()) {
+      _sourceLine = ((String) _libraryStack.pop()).trim();
+      parse();
+      bf_include();
+    }
+
+    // output footer
+    last();
+    String out = _tempString.getBuffer().toString();
+    arrows(out, false);
+
+    // write variable table for -ddd
+    if (_debug == 3 | _vartable == true) {
+      Iterator iter = _var.keySet().iterator();
+      while (iter.hasNext()) {
+        Object key = iter.next();
+        int next = ((Integer)_var.get(key)).intValue();
+        write("$" + key + "=" + next);
+      }
+      write("\n");
+    }
+
+    write(arrows(out, true));
+    if (_debug > 0) { write("\n"); }
+    if (_debug < 2) { write("@\n"); }
+
+    // display successful completion text
+    System.out.println();
+    System.out.println("Done, line " + _line + ".");
+  }
+
+  //------------------------------------------------------------------
+  // compile -- compile code in file _in
+  //------------------------------------------------------------------
+  public static void compile(String f, BufferedReader _in) {
+      while (true) {
       _sourceLine = _sourceLine.trim();
 
       // strip leading colons, if any
@@ -211,6 +281,9 @@ public class bfbasic {
         _sourceLine = _sourceLine.trim();
       }
 
+      //Debug parser
+      //System.out.println(_sourceLine);
+
       // parse first token of statement
       parse();
       _p = _p.toUpperCase();
@@ -220,6 +293,8 @@ public class bfbasic {
         bf_beep();
       } else if (_p.equals("BF")) {
         bf_bf();
+      } else if (_p.equals("CASE")) {
+        bf_case();
       } else if (_p.equals("CLS")) {
         bf_cls();
       } else if (_p.equals("COLOR") || _p.equals("COLOUR")) {
@@ -242,11 +317,15 @@ public class bfbasic {
         bf_goto();
       } else if (_p.equals("IF")) {
         bf_if();
+      } else if (_p.equals("INCLUDE")) {
+        bf_include();
       } else if (_p.equals("INPUT")) {
         bf_input();
       } else if (_p.equals("LET")) {
         parse();
         bf_let();
+      } else if (_p.equals("LIBRARY")) {
+        bf_library();
       } else if (_p.equals("LOCATE")) {
         bf_locate();
       } else if (_p.equals("LOOP")) {
@@ -261,6 +340,8 @@ public class bfbasic {
         bf_rem();
       } else if (_p.equals("RETURN")) {
         bf_return();
+      } else if (_p.equals("SELECT")) {
+        bf_select();
       } else if (_p.equals("STOP")) {
         bf_stop();
       } else if (_p.equals("SWAP")) {
@@ -280,18 +361,6 @@ public class bfbasic {
         bf_let();
       }
     }
-
-    // output footer
-    last();
-    String out = _tempString.getBuffer().toString();
-    arrows(out, false);
-    write(arrows(out, true));
-    if (_debug) { write("\n"); }
-    write("@\n");
-
-    // display successful completion text
-    System.out.println();
-    System.out.println("Done, line " + _line + ".");
   }
 
   //------------------------------------------------------------------
@@ -306,11 +375,11 @@ public class bfbasic {
         errout("Illegal variable name '" + varname + "'");
       }
     }
-    if (_debug) { write("(DIM " + varname + "(" + elements + "))\n"); }
+    if (_debug > 0) { write("(DIM " + varname + "(" + elements + "))\n"); }
     if (_var.containsKey(varname)) {
       errout("Variable '" + varname + "' already dimensioned");
     }
-    _var.put(varname, new Integer(elements)); 
+    _var.put(varname, new Integer(elements));
   }
 
   //------------------------------------------------------------------
@@ -362,22 +431,27 @@ public class bfbasic {
         if (_optLevel >= 2 && !write) {
           interaction.add(varname);
         }
-        
-        if (write && _extraDebug) { out.append(mp + ""); }
+
+        // extra verbose (-dd): write the mp numbers
+        // note: does not apply to -ddd
+        if (write && _debug == 2) { out.append(mp + ""); }
 
         // output > and <
         if (write) {
-          if (mp < pos) { out.append(string(pos - mp, '>')); }
-          if (mp > pos) { out.append(string(mp - pos, '<')); }
+          // only write arrows if not purely debug mode (-ddd)
+          if (_debug != 3) {
+            if (mp < pos) { out.append(string(pos - mp, '>')); }
+            if (mp > pos) { out.append(string(mp - pos, '<')); }
+          }
           mp = pos;
-          if (write && _extraDebug) { out.append("@" + varname); }
-        }  
+          if (write && _debug > 1) { out.append("@" + varname); }
+        }
       } else {
         // output char
         if (write) { out.append(c + ""); }
       }
     }
-    
+
     // If we're not writing things out this pass, then figure out 
     // the best variable ordering.  
     if (!write) {
@@ -398,8 +472,8 @@ public class bfbasic {
             toArray(new Integer[_var.values().size()]), 
             interaction, 10);
         var.findBestOrder();
-        
-        // clear out the old variable info and rebuild 
+
+        // clear out the old variable info and rebuild
         _var.clear();
         int order[] = var.getOrder();
         int start[] = var.getStart();
@@ -408,7 +482,6 @@ public class bfbasic {
         }
       } 
     }
-    
     return out.toString();
   }
 
@@ -419,7 +492,7 @@ public class bfbasic {
     //BEEP
     //  @T0+++++++.[-]          T0=7:PRINT CHR$(T0);:T0=0
     String o = pre() + "@_0+++++++.[-]" + post();
-    if (_debug) { o = "\n(BEEP)\n" + o; }
+    if (_debug > 0) { o = "\n(BEEP)\n" + o; }
     writeTemp(o); //arrows(o);
   }
 
@@ -435,11 +508,43 @@ public class bfbasic {
     }
     _needPost = false;
     String o = pre() + _sourceLine.trim() + post();
-    if (_debug) { o = "\n(BF)\n" + o; }
+    if (_debug > 0) { o = "\n(BF)\n" + o; }
     writeTemp(o); //arrows(o);
     _sourceLine = "";
     _needPre = false;
   }
+
+  //------------------------------------------------------------------
+  // bf_case -- builds BFBASIC code for the CASE statement
+  //------------------------------------------------------------------
+  public static void bf_case() {
+  // CASE expr
+  // CASE ELSE
+    //System.out.println("before: '"+_sourceLine+"'\n");
+    if ( _caseStack.empty() ) { errout("CASE without SELECT"); }
+    _sourceLine = (_a + _sourceLine).trim();
+    int n = findexpr("", 0);
+    if (n == -1) { errout("Syntax error"); }
+    String expr = (_sourceLine.substring(0, n)).trim();
+    _sourceLine = "";
+    Integer ltmp = (Integer) _caseDepthStack.peek();
+    int l = ltmp.intValue();
+    if (expr.equals("ELSE")) {
+      if ( l >= 1 ) { _sourceLine = "ELSE"; }
+    } else {
+      if ( l >=1 ) {
+        _sourceLine = "ELSE:";
+      }
+      _sourceLine = _sourceLine + "IF " + _caseStack.peek() + "=" + expr +" THEN:";
+      ltmp = (Integer) _caseDepthStack.pop();
+      l = ltmp.intValue();
+      l = l + 1;
+      _caseDepthStack.push(new Integer (l));
+    }
+    //System.out.println("after: '"+_sourceLine+"'\n");
+    if (_debug > 0) { writeTemp("\n{CASE " + debugtext(expr) + "}\n"); }
+  }
+
 
   //------------------------------------------------------------------
   // bf_cls -- builds BFBASIC code for the CLS statement
@@ -447,7 +552,7 @@ public class bfbasic {
   public static void bf_cls() {
     //CLS
     //  (...)                   builds PRINT CHR$(27) + "[2J";:
-    if (_debug) { writeTemp("\n{CLS}\n"); }
+    if (_debug > 0) { writeTemp("\n{CLS}\n"); }
     _sourceLine = "PRINT \"\033[2J\";:" + _sourceLine;
   }
 
@@ -461,7 +566,7 @@ public class bfbasic {
     String expr = (_sourceLine.substring(0, n)).trim();
     _sourceLine = "PRINT \"\033[\"; " + expr + "; \"m\";:"
                  + (_sourceLine.substring(n)).trim();
-    if (_debug) { writeTemp("\n{COLOR " + debugtext(expr) + "}\n"); }
+    if (_debug > 0) { writeTemp("\n{COLOR " + debugtext(expr) + "}\n"); }
   }
 
   //------------------------------------------------------------------
@@ -499,7 +604,7 @@ public class bfbasic {
     if (parseif()) {
       // no params
       // DO
-      if (_debug) { writeTemp("\n{DO}\n"); }
+      if (_debug > 0) { writeTemp("\n{DO}\n"); }
       _doStack.push(new Integer(_doAnnex));
     } else {
       // params
@@ -511,7 +616,7 @@ public class bfbasic {
         int n = findexpr("", 0);
         if (n == -1) { errout("Syntax error"); }
         String expr = (_sourceLine.substring(0, n)).trim();
-        if (_debug) { writeTemp("\n{DO WHILE " + debugtext(expr) + "}\n"); }
+        if (_debug > 0) { writeTemp("\n{DO WHILE " + debugtext(expr) + "}\n"); }
         _doStack.push(new Integer(-_doAnnex));
         _sourceLine = "IF NOT(" + expr + ") THEN GOTO _D" + (_doAnnex + 1) + ":"
                      + (_sourceLine.substring(n)).trim();
@@ -521,7 +626,7 @@ public class bfbasic {
         int n = findexpr("", 0);
         if (n == -1) { errout("Syntax error"); }
         String expr = (_sourceLine.substring(0, n)).trim();
-        if (_debug) { writeTemp("\n{DO UNTIL " + debugtext(expr) + "}\n"); }
+        if (_debug > 0) { writeTemp("\n{DO UNTIL " + debugtext(expr) + "}\n"); }
         _doStack.push(new Integer(-_doAnnex));
         _sourceLine = "IF " + expr + " THEN GOTO _D" + (_doAnnex + 1) + ":"
                      + (_sourceLine.substring(n)).trim();
@@ -539,7 +644,7 @@ public class bfbasic {
   //------------------------------------------------------------------
   public static void bf_else() {
     // ELSE
-    if (_debug) { writeTemp("\n{ELSE}\n"); }
+    if (_debug > 0) { writeTemp("\n{ELSE}\n"); }
     if (_ifStack.empty()) { errout("ELSE without IF"); }
     Integer l = (Integer) _ifStack.pop();
     _sourceLine = "GOTO _I" + _ifAnnex + ":_I" + l + ":" + _sourceLine;
@@ -553,20 +658,35 @@ public class bfbasic {
     parse();
     if (_p.equalsIgnoreCase("IF")) {
       // END IF
-      if (_debug) { writeTemp("\n{END IF}\n"); }
+      if (_debug > 0) { writeTemp("\n{END IF}\n"); }
       if (_ifStack.empty()) { errout("END IF without IF"); }
       Integer l = (Integer) _ifStack.pop();
       _sourceLine = "_I" + l + ":" + _sourceLine;
     } else {
-      //END
-      //  @G-                   G=0 (no more basic statements execute)
-      //  @Q-                   Q=0 (quit)
-      _needPost = true;
-      _sourceLine = (_p + _a + _sourceLine).trim();
-      String o = pre() + "@_G-@_Q-" + post();
-      if (_debug) { o = "\n(END)\n" + o; }
-      writeTemp(o); //arrows(o);
-      _needPre = true;
+      if (_p.equalsIgnoreCase("SELECT")) {
+      // END SELECT
+      if (_debug > 0) { writeTemp("\n{END SELECT}\n"); }
+      if (_caseStack.empty()) { errout("END SELECT without SELECT"); }
+      Integer ltmp = (Integer) _caseDepthStack.pop();
+      int l = ltmp.intValue();
+      String temp = (String) _caseStack.pop();
+      _sourceLine = "";
+      for (int i = 1; i <= l; i++) {
+        _sourceLine = _sourceLine + "END IF:";
+      }
+      _sourceLine = _sourceLine + "_C" + (_selectAnnex-1) + ":";
+      _selectAnnex -= 1;
+    } else {
+        //END
+        //  @G-                   G=0 (no more basic statements execute)
+        //  @Q-                   Q=0 (quit)
+        _needPost = true;
+        _sourceLine = (_p + _a + _sourceLine).trim();
+        String o = pre() + "@_G-@_Q-" + post();
+        if (_debug > 0) { o = "\n(END)\n" + o; }
+        writeTemp(o); //arrows(o);
+        _needPre = true;
+      }
     }
   }
 
@@ -577,19 +697,23 @@ public class bfbasic {
     parse();
     _p = _p.toUpperCase();
     if (_p.equals("DO")) {
-      if (_debug) { writeTemp("\n{EXIT DO}\n"); }
+      if (_debug > 0) { writeTemp("\n{EXIT DO}\n"); }
       if (_doStack.empty()) { errout("EXIT DO without DO"); }
       Integer l = (Integer) _doStack.pop();
       _sourceLine = "GOTO _D" + (Math.abs(l.intValue()) + 1) + ":" + _sourceLine;
       if (l.intValue() > 0) { l = new Integer(-l.intValue()); }
       _doStack.push(l);
     } else if (_p.equals("FOR")) {
-      if (_debug) { writeTemp("\n{EXIT FOR}\n"); }
+      if (_debug > 0) { writeTemp("\n{EXIT FOR}\n"); }
       if (_forStack.empty()) { errout("EXIT FOR without FOR"); }
       Integer l = (Integer) _forStack.pop();
       _sourceLine = "GOTO _F" + (Math.abs(l.intValue()) + 1) + ":" + _sourceLine;
       if (l.intValue() > 0) { l = new Integer(-l.intValue()); }
       _forStack.push(l);
+    } else if (_p.equals("SELECT")) {
+      if (_debug > 0) { writeTemp("\n{EXIT SELECT}\n"); }
+      if (_caseStack.empty()) { errout("EXIT SELECT without SELECT"); }
+      _sourceLine = "GOTO _C" + (_selectAnnex -  1) + ":";
     } else {
       errout("Syntax error");
     }
@@ -612,11 +736,19 @@ public class bfbasic {
     n = findexpr("", 0);
     if (n == -1) { errout("Syntax error"); }
     String expr3 = (_sourceLine.substring(0, n)).trim();
+    String s = "1";
+    n = findexpr("STEP",0);
+    if ( n != -1) {
+      expr3 = (_sourceLine.substring(0, n)).trim();
+      s = (_sourceLine.substring(n+4)).trim();
+    }
+    n = findexpr("", 0); // restore n
     _forStack.push(new Integer(-_forAnnex));
     _forTopStack.push(new String(expr3));
+    _forStepStack.push(new String(s));
     _sourceLine = expr + "=" + expr2 + ":" + p0
                  + ":" + (_sourceLine.substring(n)).trim();
-    if (_debug) {
+    if (_debug > 0) {
       writeTemp("\n{FOR " + debugtext(expr) + "=" + debugtext(expr2)
             + " TO " + debugtext(expr3) + "}\n");
     }
@@ -636,7 +768,7 @@ public class bfbasic {
     }
     _sourceLine = "_GS(_GP)=" + n + ":_GP=_GP+1:GOTO " + _p + ":"
                  + ":_G" + n + ":" + _sourceLine;
-    if (_debug) { writeTemp("\n{GOSUB " + _p + "}\n"); }
+    if (_debug > 0) { writeTemp("\n{GOSUB " + _p + "}\n"); }
   }
 
   //------------------------------------------------------------------
@@ -648,7 +780,7 @@ public class bfbasic {
     _needPost = true;
     parse();
     String o = pre() + label(_p) + "+@_G-" + post();
-    if (_debug) { o = "\n(GOTO " + _p +")\n" + o; }
+    if (_debug > 0) { o = "\n(GOTO " + _p +")\n" + o; }
     writeTemp(o); //arrows(o);
     _needPre = true;
   }
@@ -672,7 +804,7 @@ public class bfbasic {
       //  (...)                     LABEL#=1:G=0
       //  @TEMP0[-]]              END IF:TEMP0=0
       parse();
-      if (_debug) { o = "\n(IF " + debugtext(expr) + " THEN GOTO " + _p + ")\n"; }
+      if (_debug > 0) { o = "\n(IF " + debugtext(expr) + " THEN GOTO " + _p + ")\n"; }
     } else if (_p.equals("EXIT")) {
       // IF expr THEN EXIT
       parse();
@@ -684,7 +816,7 @@ public class bfbasic {
         _p = "_D" + (Math.abs(l.intValue()) + 1);
         if (l.intValue() > 0) { l = new Integer(-l.intValue()); }
         _doStack.push(l);
-        if (_debug) {
+        if (_debug > 0) {
           o = "\n(IF " + debugtext(expr) + " THEN {EXIT DO}(GOTO _D"
               + (Math.abs(l.intValue()) + 1) + "))\n";
         }
@@ -695,7 +827,7 @@ public class bfbasic {
         _p = "_F" + (Math.abs(l.intValue()) + 1);
         if (l.intValue() > 0) { l = new Integer(-l.intValue()); }
         _forStack.push(l);
-        if (_debug) {
+        if (_debug > 0) {
           o = "\n(IF " + debugtext(expr) + " THEN {EXIT FOR}(GOTO _F"
               + (Math.abs(l.intValue()) + 1) + "))\n";
         }
@@ -704,7 +836,7 @@ public class bfbasic {
       }
     } else {
       // IF expr THEN
-      if (_debug) { writeTemp("\n{IF " + debugtext(expr) + " THEN}\n"); }
+      if (_debug > 0) { writeTemp("\n{IF " + debugtext(expr) + " THEN}\n"); }
       _sourceLine = "IF NOT(" + expr + ") THEN GOTO _I" + _ifAnnex + ":" + _sourceLine;
       _ifStack.push(new Integer(_ifAnnex++));
       return;
@@ -715,6 +847,29 @@ public class bfbasic {
     writeTemp(o); //arrows(o);
     _needPre = true;
   }
+
+  //------------------------------------------------------------------
+  // bf_include -- inline compilation of external source file
+  //------------------------------------------------------------------
+  public static void bf_include() {
+    _sourceLine = (_a + _sourceLine).trim();
+    String f = (_sourceLine.substring(1, _sourceLine.length()-1)).trim();
+    _sourceLine="";
+    try {
+      _in = new BufferedReader(new FileReader(f)); // Java 1.1
+    } catch (FileNotFoundException e) {
+      errout("Error opening '" + f + "'.  File not found");
+    }
+    String _tmpfile = _curfile;
+    _curfile = f;
+    int _tline = _line;
+    _line = 0;
+    compile(f,_in);
+    _line = _tline;
+    _curfile = _tmpfile;
+    _sourceLine = "";
+  }
+
 
   //------------------------------------------------------------------
   // bf_input -- writes out BF code for the INPUT statement
@@ -768,7 +923,7 @@ public class bfbasic {
           + (_crlf?"++++++++++.[-]":"")
           + "@~" + _p + ">[-]<@_T0[@~" + _p + ">+<@_T0-]@~" + _p
           + ">>[>>[-]<<-[>>+<<-]+>>]>[-]<<<[<<]>[>[>>]>+<<<[<<]>-]>-<<" + post();
-      if (_debug) {
+      if (_debug > 0) {
         o = "\n(INPUT " + _p + "(" + debugtext(expr) + ")\n" + o;
       }
     } else {
@@ -792,7 +947,7 @@ public class bfbasic {
       //    ]                             END IF
       //  @T0]                          LOOP:T0=0
       //  ++++++++++.[-]                PRINT CHR$(T0); or not
-      if (_debug) { o = "\n(INPUT " + _p + ")\n"; }
+      if (_debug > 0) { o = "\n(INPUT " + _p + ")\n"; }
       o += pre() + "@" + _p + "[-]@_0+[-@_1,.----------" + (_crlf?"---":"") + "[@_0+"
            + "@_2+++++" + (_crlf?"":"+") + "[@_1------" + (_crlf?"-":"") + "@_2-]"
            + "@" + _p + "[@_2+@" + _p + "-]@_2[@" + _p + "++++++++++@_2-]"
@@ -808,7 +963,7 @@ public class bfbasic {
     //L#: label
     //  @LINE#[@G+@LINE#-]
     String o = "";
-    if (_debug) {
+    if (_debug > 0) {
       o = "\n(LABEL " + _p + ")\n";
       if (!_needPre) {
         _needPost = true;
@@ -822,7 +977,7 @@ public class bfbasic {
       }
     }
     o += label(_p) + "[@_G+" + label(_p) + "-]";
-    if (_debug) { o += "\t"; }
+    if (_debug > 0) { o += "\t"; }
     writeTemp(o); //arrows(o);
     _p = "";
     _needPre = true;
@@ -873,9 +1028,9 @@ public class bfbasic {
     _sourceLine = (_sourceLine.substring(n)).trim();
     ae = new AlgebraicExpression(expr2);
     o += ae.parse() + "@_T0[@~" + p0 + ">+<@_T0-]@~" + p0
-         + ">>[[>>]+[<<]>>-]+[>>]<[-]<[<<]>[>[>>]<+<[<<]>-]>[>>]<<[-<<]" 
+         + ">>[[>>]+[<<]>>-]+[>>]<[-]<[<<]>[>[>>]<+<[<<]>-]>[>>]<<[-<<]"
          + post();
-    if (_debug) {
+    if (_debug > 0) {
       o = "\n(" + p0 + "(" + debugtext(expr) + ")=" + debugtext(expr2) + ")\n" + o;
     }
     writeTemp(o); //arrows(o);
@@ -907,7 +1062,7 @@ public class bfbasic {
       for (int l = 0; l < parsing.length(); l++) {
         // get character
         c = parsing.charAt(l);
-        
+
         // variable
         if (c == '@') {
           // find end of variable name
@@ -927,25 +1082,35 @@ public class bfbasic {
           if (varname.equals(_p)) {
             out = null;
             break;
-          }  
+          }
           if (varname.equals("_T0")) {
             varname = _p;
           }
-          out.append("@" + varname); 
+          out.append("@" + varname);
         } else {
-          out.append(c + ""); 
-        }  
-      } 
-    }    
+          out.append(c + "");
+        }
+      }
+    }
     String o;
     if (out == null || _optLevel < 3) {
       o = pre() + parsing + "@" + _p + "[-]@_T0[@" + _p + "+@_T0-]" + post();
     } else {
       o = pre() + out.toString() + post();
-    }  
-    if (_debug) { o = "\n(" + _p + "=" + debugtext(expr) + ")\n" + o; }
+    }
+    if (_debug > 0) { o = "\n(" + _p + "=" + debugtext(expr) + ")\n" + o; }
     writeTemp(o); //arrows(o);
   }
+
+  //------------------------------------------------------------------
+  // bf_library -- inline compilation of external source file
+  //------------------------------------------------------------------
+  public static void bf_library() {
+    _sourceLine = "INSTALL " + (_a + _sourceLine).trim();
+    _libraryStack.push(new String (_sourceLine));
+    _sourceLine = "";
+  }
+
 
   //------------------------------------------------------------------
   // bf_locate -- builds BFBASIC code for the LOCATE statement
@@ -962,7 +1127,7 @@ public class bfbasic {
     String expr2 = (_sourceLine.substring(0, n)).trim();
     _sourceLine = "PRINT \"\033[\"; " + expr + "; \";\"; "
                  + expr2 + "; \"H\";:" + (_sourceLine.substring(n)).trim();
-    if (_debug) {
+    if (_debug > 0) {
       writeTemp("\n{LOCATE " + debugtext(expr + "," + expr2) + "}\n");
     }
   }
@@ -976,7 +1141,7 @@ public class bfbasic {
     if (parseif()) {
       // no params
       // LOOP
-      if (_debug) { writeTemp("\n{LOOP}\n"); }
+      if (_debug > 0) { writeTemp("\n{LOOP}\n"); }
       l = (Integer) _doStack.pop();
       String temp = "GOTO _D" + Math.abs(l.intValue()) + ":";
       if (l.intValue() < 0) { temp += "_D" + (-l.intValue() + 1) + ":"; }
@@ -992,7 +1157,7 @@ public class bfbasic {
         if (n == -1) { errout("Syntax error"); }
         String expr = (_sourceLine.substring(0, n)).trim();
         _sourceLine = (_sourceLine.substring(n)).trim();
-        if (_debug) { writeTemp("\n{LOOP WHILE " + debugtext(expr) + "}\n"); }
+        if (_debug > 0) { writeTemp("\n{LOOP WHILE " + debugtext(expr) + "}\n"); }
         l = (Integer) _doStack.pop();
         String temp = "IF " + expr + " THEN GOTO _D" + Math.abs(l.intValue()) + ":";
         if (l.intValue() < 0) { temp += "_D" + (-l.intValue() + 1) + ":"; }
@@ -1004,7 +1169,7 @@ public class bfbasic {
         if (n == -1) { errout("Syntax error"); }
         String expr = (_sourceLine.substring(0, n)).trim();
         _sourceLine = (_sourceLine.substring(n)).trim();
-        if (_debug) { writeTemp("\n{LOOP UNTIL " + debugtext(expr) + "}\n"); }
+        if (_debug > 0) { writeTemp("\n{LOOP UNTIL " + debugtext(expr) + "}\n"); }
         l = (Integer) _doStack.pop();
         String temp = "IF NOT(" + expr + ") THEN GOTO _D" + Math.abs(l.intValue()) + ":";
         if (l.intValue() < 0) { temp += "_D" + (-l.intValue() + 1) + ":"; }
@@ -1025,16 +1190,12 @@ public class bfbasic {
     String expr = (_sourceLine.substring(0, n)).trim();
     Integer l = (Integer) _forStack.pop();
     String m = (String) _forTopStack.pop();
-    // if m is a number in the range 0-255 then {                                                     
-    // String temp = expr + "=" + expr + "+1:IF NOT(" + expr + "="
-    //              + ((m+1)&255) + ") THEN GOTO _F" + Math.abs(l.intValue()) + ":";
-    // } else { // m is not a number
-    String temp = expr + "=" + expr + "+1:IF NOT(" + expr + "="
-                 + m + "+1) THEN GOTO _F" + Math.abs(l.intValue()) + ":";
-    // } 
+    String s = (String) _forStepStack.pop();
+    String temp = expr + "=" + expr + " + " + s + ":IF NOT(" + expr + "="
+                 + m + " + " + s + ") THEN GOTO _F" + Math.abs(l.intValue()) + ":";
     if (l.intValue() < 0) { temp += "_F" + (-l.intValue() + 1) + ":"; }
     _sourceLine = temp + (_sourceLine.substring(n)).trim();
-    if (_debug) { writeTemp("\n{NEXT " + debugtext(expr) + "}\n"); }
+    if (_debug > 0) { writeTemp("\n{NEXT " + debugtext(expr) + "}\n"); }
     // writeTemp(o);
   }
 
@@ -1047,7 +1208,7 @@ public class bfbasic {
       //PRINT
       //  (...)                 PRINT
       String o = pre() + newline() + post();
-      if (_debug) { o = "\n(PRINT)\n" + o; }
+      if (_debug > 0) { o = "\n(PRINT)\n" + o; }
       writeTemp(o); //arrows(o);
     } else {
       // params
@@ -1074,7 +1235,7 @@ public class bfbasic {
             //PRINT
             //  (...)             PRINT
             if (!sameline) {
-              if (_debug) { o += "\n(PRINT \"\")\n"; }
+              if (_debug > 0) { o += "\n(PRINT \"\")\n"; }
               o += newline();
             }
           } else {
@@ -1082,7 +1243,7 @@ public class bfbasic {
             //PRINT "text"
             //  @T0               (...)
             //  (...)             PRINT "text"
-            if (_debug) {
+            if (_debug > 0) {
               o += "\n(PRINT \"" + debugtext(_p) + "\"";
               if (sameline) { o += ";"; }
               o += ")\n";
@@ -1113,7 +1274,7 @@ public class bfbasic {
             _sourceLine = _sourceLine.substring(1);
           }
           AlgebraicExpression ae = new AlgebraicExpression(expr);
-          if (_debug) {
+          if (_debug > 0) {
             o += "\n(PRINT CHR$(" + debugtext(expr) + ")";
             if (sameline) { o += ";"; }
             o += ")\n";
@@ -1148,7 +1309,7 @@ public class bfbasic {
             _sourceLine = _sourceLine.substring(1);
           }
           AlgebraicExpression ae = new AlgebraicExpression(expr);
-          if (_debug) {
+          if (_debug > 0) {
             o += "\n(PRINT SPACE$(" + debugtext(expr) + ")";
             if (sameline) { o += ";"; }
             o += ")\n";
@@ -1183,7 +1344,7 @@ public class bfbasic {
             sameline = true;
             _sourceLine = _sourceLine.substring(1);
           }
-          if (_debug) {
+          if (_debug > 0) {
             o += "\n(PRINT STRING$(" + debugtext(expr + "," + expr2) + ")";
             if (sameline) { o += ";"; }
             o += ")\n";
@@ -1207,7 +1368,7 @@ public class bfbasic {
             _sourceLine = _sourceLine.substring(1);
           }
           AlgebraicExpression ae = new AlgebraicExpression(expr);
-          if (_debug) {
+          if (_debug > 0) {
             o += "\n(PRINT " + debugtext(expr);
             if (sameline) { o += ";"; }
             o += ")\n";
@@ -1219,7 +1380,7 @@ public class bfbasic {
       }
       if (!o.equals("")) {
         o = pre() + o;
-        if (_debug) {
+        if (_debug > 0) {
           o = "\n{PRINT}\n" + o;
         }
         o += post();
@@ -1250,7 +1411,7 @@ public class bfbasic {
       String o = pre() + "@_0" + bf_text("Random seed?")
                  +"+[@_0-@_1,----------" + (_crlf?"---":"") + "[@_0+@_1[@_RH+@_1-]"
                  +"@_RH[@_RL+@_1+@_RH-]@_1[@_RH+@_1-]]@_0]" + post();
-      if (_debug) { o = "\n(RANDOMIZE KEY)\n" + o; }
+      if (_debug > 0) { o = "\n(RANDOMIZE KEY)\n" + o; }
       writeTemp(o); //arrows(o);
     } else {
       errout("Syntax error");
@@ -1262,7 +1423,7 @@ public class bfbasic {
   //------------------------------------------------------------------
   public static void bf_rem() {
     // REM comment
-    if (_debug == true) {
+    if (_debug > 0) {
       writeTemp("\n{REM}\n" + debugtext(_sourceLine) + "\n");
     }
     _sourceLine = "";
@@ -1276,9 +1437,35 @@ public class bfbasic {
     //  @_L#+@G-              LABEL[p]=1:G=0
     _needPost = true;
     String o = pre() + "@_GP-" + label("_RETURN") + "+@_G-" + post();
-    if (_debug) { o = "\n(RETURN)\n" + o; }
+    if (_debug > 0) { o = "\n(RETURN)\n" + o; }
     writeTemp(o); //arrows(o);
     _needPre = true;
+  }
+
+  //------------------------------------------------------------------
+  // bf_select -- Initiate a SELECT...CASE structure
+  //------------------------------------------------------------------
+  public static void bf_select() {
+    //SELECT CASE expr
+    //_caseStack.push(new String ("expr"));
+    //_caseDepthStack.push(new Integer (0));
+    //_sourceLine="";
+
+    _sourceLine = (_a + _sourceLine).trim();
+    int n = findexpr(" ", 0);
+    if (n == -1) { errout("Syntax error"); }
+    String expr = (_sourceLine.substring(0, n)).trim();
+    if ( !expr.equals("CASE") ) { errout("Syntax error"); }
+    int m = findexpr("",n + 1);
+    if (m == -1) { errout("Syntax error"); }
+    expr = (_sourceLine.substring(n, m)).trim();
+
+    _caseStack.push(new String (expr));
+    _caseDepthStack.push(new Integer (0));
+    _sourceLine="";
+    _selectAnnex += 1;
+
+    if (_debug > 0) { writeTemp("\n{SELECT CASE " + debugtext(expr) + "}\n"); }
   }
 
   //------------------------------------------------------------------
@@ -1287,7 +1474,7 @@ public class bfbasic {
   public static void bf_stop() {
     //STOP
     //  (...)                   builds PRINT "Stopped":END:
-    if (_debug) { writeTemp("\n{STOP}\n"); }
+    if (_debug > 0) { writeTemp("\n{STOP}\n"); }
     _sourceLine = "PRINT \"Stopped\":END:" + _sourceLine;
   }
 
@@ -1306,7 +1493,7 @@ public class bfbasic {
     parse();
     String o = pre() + "@" + p0 + "[@_0+@" + p0 + "-]@" + _p
                + "[@" + p0 + "+@" + _p + "-]@_0[@" + _p + "+@_0-]" + post();
-    if (_debug) { o = "\n(SWAP " + p0 + ", " + _p + ")\n" + o; }
+    if (_debug > 0) { o = "\n(SWAP " + p0 + ", " + _p + ")\n" + o; }
     writeTemp(o); //arrows(o);
   }
 
@@ -1320,7 +1507,7 @@ public class bfbasic {
     _needPost = true;
     _sourceLine = (_p + _a + _sourceLine).trim();
     String o = pre() + "@_G-@_Q-" + post();
-    if (_debug) { o = "\n(SYSTEM)\n" + o; }
+    if (_debug > 0) { o = "\n(SYSTEM)\n" + o; }
     writeTemp(o); //arrows(o);
     _needPre = true;
   }
@@ -1467,7 +1654,7 @@ public class bfbasic {
   public static void errout(String e) {
     System.out.println();
     System.out.print(e);
-    if (_line > 0) { System.out.print(", line " + _line); }
+    if (_line > 0) { System.out.print(", line " + _line + " in " + _curfile); }
     System.out.println(".");
     System.exit(1);
   }
@@ -1522,7 +1709,7 @@ public class bfbasic {
     //  @G+@Q+                  G=1:Q=1
     //  [                       DO WHILE Q<>0
     String o = "@_G+@_Q+[";
-    if (_debug) { o = "\n(FIRST)\n    (code) " + o; }
+    if (_debug > 0) { o = "\n(FIRST)\n    (code) " + o; }
     writeTemp(o); //arrows(o);
     _needPre = true;
   }
@@ -1640,24 +1827,24 @@ public class bfbasic {
     //  @Q]                     LOOP
     _needPost = true;
     String o = pre() + "@_Q-" + post();
-    if (_debug) { o = "\n(END)\n" + o; }
+    if (_debug > 0) { o = "\n(END)\n" + o; }
     if (_gosubAnnex > 0) {
       _needPre = true;
       _needPost = true;
-      if (_debug) { o += "\n(VECTORS)\n    (code) "; }
+      if (_debug > 0) { o += "\n(VECTORS)\n    (code) "; }
       o += label("_RETURN") + "[@_G+" + label("_RETURN") + "-]";
       AlgebraicExpression ae = new AlgebraicExpression("_GS(_GP)");
-      if (_debug) { o += "\n"; } 
+      if (_debug > 0) { o += "\n"; } 
       o += pre() + ae.parse() + "@_T1[-]";
       for (int n = 0; n < _gosubAnnex; n++) {
-        if (_debug) { o += "\n(IF _T0=" + n + " THEN GOTO _G" + n + ")\n"; }
+        if (_debug > 0) { o += "\n(IF _T0=" + n + " THEN GOTO _G" + n + ")\n"; }
         o += "@_T2+@_T0[@_T1+@_T2[-]@_T0-]-@_T1[@_T0+@_T1-]@_T2[" + 
              label("_G" + n) + "+@_G-@_T2-]";
       }
       o += "@_T0[-]" + post();
     }
     
-    if (_debug) { o += "\n(LAST)\n    (code) "; }
+    if (_debug > 0) { o += "\n(LAST)\n    (code) "; }
     o += "@_Q]";
     writeTemp(o); //arrows(o);
   }
@@ -1750,9 +1937,9 @@ public class bfbasic {
     String o = "";
     if (_needPre) {
       o = "@_G[@_T[-]+@_G-]@_T[@_G+";
-      if (_debug) { o = "    (pre)  \t" + o + "\t\n    (code) \t"; }
+      if (_debug > 0) { o = "    (pre)  \t" + o + "\t\n    (code) \t"; }
       _needPre = false;
-    } else if (_debug) {
+    } else if (_debug > 0) {
       o = "    (code) \t";
     }
     return o;
@@ -1767,10 +1954,10 @@ public class bfbasic {
     //  @T-]                    END IF
     String o = "";
     if (_needPost) {
-      if (_debug) { o = "\t\n    (post) "; }
+      if (_debug > 0) { o = "\t\n    (post) "; }
       o += "@_T-]";
       _needPost = false;
-    } else if (_debug) {
+    } else if (_debug > 0) {
       o = "\t\n";
     }
     return o;
@@ -1791,16 +1978,18 @@ public class bfbasic {
   public static void usage() {
     System.out.println();
     System.out.println("Usage:");
-    System.out.println("    bfbasic [-c] [-d | -D] [-O#] [-w [#]] FILE[.bas] [[-o] FILE] [-?]");
+    System.out.println("    bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]");
     System.out.println();
     System.out.println("Where: ");
     System.out.println("    -c           Treat newline as CRLF, default: LF");
     System.out.println("    -d           Debug output");
-    System.out.println("    -D           Verbose debug output");
+    System.out.println("    -dd          Verbose debug output");
+    System.out.println("    -ddd         Only debug output, no > or < generated");
     System.out.println("    -Olevel      Optimization level, default: 2");
+    System.out.println("    -t           Write variable table");
     System.out.println("    -w [column]  Wraps output at the given column, default: 72");
     System.out.println("    FILE         Input filename");
-    System.out.println("    -o outfile   Specify output filename, default: FILE.bf");
+    System.out.println("    -o outfile   Specify output filename, default: FILE.b");
     System.out.println("    -?           Display usage information");
   }
 
@@ -1809,7 +1998,7 @@ public class bfbasic {
   //------------------------------------------------------------------
   static int _linePos = 1;
   public static void writeTemp(String text) {
-    if (_debug) {
+    if (_debug > 0) {
       for (int n = 0; n < text.length(); n++) {
         if (text.charAt(n) == '\t') {
           _insert = !_insert;
@@ -1839,7 +2028,7 @@ public class bfbasic {
   //------------------------------------------------------------------
   public static void write(String text) {
     int linePos = 1;
-    if (_debug) {
+    if (_debug > 0) {
       for (int n = 0; n < text.length(); n++) {
         if (text.charAt(n) == '\n') {
           _out.println();

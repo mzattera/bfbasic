@@ -1,11 +1,13 @@
-1. Make sure your Eclipse project is synchronized with GitHub.
+1. Update "Version History" in README file in Eclipse project with release notes.
 
-2. Within Eclipse, go to File > Export > Java Runnable JAR File
+2. Make sure your Eclipse project is synchronized with GitHub.
+
+3. Within Eclipse, go to File > Export > Java Runnable JAR File
    
    Select run configuration bfbasic - bfbasic and a destination folder for the .jar file.
    Name the .jar file bfbasic.jar.
    
-2. Zip together:
+4. Zip together:
 
    a. the newly created bfbasic.jar
    b. Following files that can be found inside the main folder of the Java project:
@@ -15,5 +17,5 @@
       LICENSE
       README
       
-3. Create a new release in GitHub and upload the newly created .zip file as binaries for the release.
+5. Create a new release in GitHub and upload the newly created .zip file as binaries for the release.
    

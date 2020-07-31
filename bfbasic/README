@@ -206,6 +206,28 @@ Known Problems
 
 Version History
 ---------------
+1.50    10 Jul 2005 [Jon] (Release candidate 2)
+* Fixed bug in CASE handling which prevented compiling
+  on some implementations
+
+1.50    09 Jul 2005 [Jon] (Release candidate 1)
+* Added -t prints $var=cell line for bfdebug
+* Added FOR...STEP (for -ve STEP use 0-#)
+* Added SELECT CASE flow control, can be nested
+  SELECT CASE expr, CASE expr, END SELECT, EXIT SELECT
+* Added INCLUDE for inline compilation of external files
+* Added LIBRARY to INCLUDE libraries at end of program
+* Change: Display filename on compile error
+* Line number correct for current file
+
+1.42    30 Jun 2005 [Jeff]
+* Added --?, --help, /? (same as -?)
+* Added -dd (same as -D)
+* Added -ddd, purely debug mode
+* -dd and -ddd do not print @ as last char of file
+* Changed default extension to .b instead of .bf
+* -ddd prints $var=cell line for bfdebug
+
 1.41    29 Jun 2005
 * FOR...NEXT code rewritten, speed/size improvements and
   "FOR var = 0 TO 255" now works! [Jon]

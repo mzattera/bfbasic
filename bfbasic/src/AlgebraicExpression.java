@@ -209,7 +209,7 @@ public class AlgebraicExpression {
             operand1 = ((Integer) operands.peek()).intValue();
             int operand1Type = ((Integer) operandTypes.peek()).intValue();
             if (operand1Type >= 0) {
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + operand1 + "=" + operand1Type + ")\n";
               }
               parsed += "@_T" + operand1 + "[-]" + addTo(operand1Type);
@@ -225,7 +225,7 @@ public class AlgebraicExpression {
              */
             String code = getCode("_T" + operand1, operator, "_T" + operand2, simple);
             if (code == null) {
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + operand2 + "=" + simple + ")\n";
               }
               parsed += "@_T" + operand2 + "[-]" + addTo(simple);
@@ -242,7 +242,7 @@ public class AlgebraicExpression {
               //  @T0 ([-]) -           T0=255
               //  @V1[@T0-@V1-]         T0=T0-V1:V1=0
               //  @T0[@V1+@T0-]         V1=T0:T0=0
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + (_tempvar - 1) + "=NOT(_T" + (_tempvar - 1) + "))\n";
               }
               parsed += "@_0-@_T" + (_tempvar - 1) + "[@_0-@_T" + (_tempvar - 1)
@@ -254,7 +254,7 @@ public class AlgebraicExpression {
               //  @V1+
               //  @V2>>[>>]<-]<[<<]>[>[>>]<+<[<<]>-]>[>>]<<[-<<]
               
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + (_tempvar - 1) + "=" + funct + "(_T"
                 + (_tempvar - 1) + "))\n";
               }
@@ -287,7 +287,7 @@ public class AlgebraicExpression {
           operandTypes.push(new Integer(val)); // means simple
           _tempvar++;
         } else if (_tokentype == TOKEN_VARIABLE) {
-          if (bfbasic._debug) {
+          if (bfbasic._debug > 0) {
             parsed += "\n(_T" + _tempvar + "=" + _token + ")\n";
           }
           if (_token.equalsIgnoreCase("INKEY")) {
@@ -388,7 +388,7 @@ public class AlgebraicExpression {
             operand1 = ((Integer) operands.peek()).intValue();
             int operand1Type = ((Integer) operandTypes.peek()).intValue();
             if (operand1Type >= 0) {
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + operand1 + "=" + operand1Type + ")\n";
               }
               parsed += "@_T" + operand1 + "[-]" + addTo(operand1Type);
@@ -404,7 +404,7 @@ public class AlgebraicExpression {
              */
             String code = getCode("_T" + operand1, operator, "_T" + operand2, simple);
             if (code == null) {
-              if (bfbasic._debug) {
+              if (bfbasic._debug > 0) {
                 parsed += "\n(_T" + operand2 + "=" + simple + ")\n";
               }
               parsed += "@_T" + operand2 + "[-]" + addTo(simple);
@@ -427,7 +427,7 @@ public class AlgebraicExpression {
         operand1 = ((Integer) operands.peek()).intValue();
         int operand1Type = ((Integer) operandTypes.peek()).intValue();
         if (operand1Type >= 0) {
-          if (bfbasic._debug) {
+          if (bfbasic._debug > 0) {
             parsed += "\n(_T" + operand1 + "=" + operand1Type + ")\n";
           }
           parsed += "@_T" + operand1 + "[-]" + addTo(operand1Type);
@@ -443,7 +443,7 @@ public class AlgebraicExpression {
          */
         String code = getCode("_T" + operand1, operator, "_T" + operand2, simple);
         if (code == null) {
-          if (bfbasic._debug) {
+          if (bfbasic._debug > 0) {
             parsed += "\n(_T" + operand2 + "=" + simple + ")\n";
           }
           parsed += "@_T" + operand2 + "[-]" + addTo(simple);
@@ -474,7 +474,7 @@ public class AlgebraicExpression {
   //------------------------------------------------------------------
   String getCode(String operand1, String operator_, String operand2, int simple) {
     String code = "";
-    if (bfbasic._debug) {
+    if (bfbasic._debug > 0) {
       if (operand1.equals("_T-1")) {
         code += "\n(_T" + operand2 + "=-_T" + operand2 + ")\n";
       } else if (simple < 0) {
