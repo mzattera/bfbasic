@@ -1,0 +1,35 @@
+BFBASIC -- BFBASIC Debugger
+Copyright (c) 2001-2003 by Jeffry Johnston
+Programmed using QuickBasic Extended 7.0
+E-Mail: jeffryjohnston@yahoo.com
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation. See the file LICENSE for more details.
+
+Usage
+-----
+BFBDEBUG file[.bf] [-?]
+Where:
+  file.bf       Input file (the extension can be left off)
+  -?            Display quick usage information
+
+Introduction
+------------
+BFBDEBUG is a debugger for BF programs generated with the BFBASIC
+compiler debug output.
+
+Limitations
+-----------
+Cannot handle source files with lines longer than 80 characters.
+
+Version History
+---------------
+0.20    24 Sep 2003
+* Improved error status code
+* Memory wraps around (still an error)
+* Reports error on cell wrap
+* Executes @ (end of program)
+
+0.10    20 Sep 2003
+* Initial release

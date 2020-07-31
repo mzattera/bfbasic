@@ -1,0 +1,291 @@
+BFBASIC -- Basic to BrainF*** Compiler
+Copyright (c) 2001-2005 Jeffry Johnston, with contributions by others
+WWW: http://kidsquid.com/compilers/bfbasic
+
+
+Contributors (thanks!)
+------------
+[Jeff]  Jeffry Johnston (bfbasic@kidsquid.com)         
+[Jon]   Jon Ripley (jon@jonripley.com)
+
+
+License
+-------
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation. See the file LICENSE for more details.
+
+
+Usage
+-----
+bfbasic [-c] [-d | -D] [-O#] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
+
+Where: 
+    -c           Treat newline as CR LF.  The default is LF
+    -d           Add additional debug output
+    -D           Verbose debug output
+    -Olevel      Optimization level.  The default is 2
+    -w [column]  Wraps output at the given column, default: 72
+    FILE         Input filename.  The ".bas" extension may be omitted
+    -o outfile   Specify output filename.  The default filename is FILE.bf
+    -?           Display usage information
+
+
+Introduction
+------------
+BFBASIC is a Basic to BF compiler written using the Java programming
+language.  An understanding of the Basic language is assumed.
+
+Variables and arrays do not need to be dimensioned before use, 
+however, certain orderings of variables produce smaller code than 
+others.  If -O2 (default) or greater is used, an attempt will be made
+to find the best arrangement (this is what "Optimizing..."
+represents).  Optimization level 3 exists, but it is experimental and
+currently breaks some programs.
+
+Variable names must contain only letters and numbers and must start 
+with a letter.  Arrays and variables can share the same name, but the
+practice is not recommended.  V1, V2, and V3 are examples of variable
+names.  Variables can hold unsigned byte values from 0 to 255 (or more
+depending on the particular BF implementation used, although some
+functions require 8-bit cells for proper functioning).
+
+Arrays can be dimensioned to hold up to 256 elements each.  Each
+element can store an unsigned byte value from 0 to 255.  The array
+element numbers are 0 based (i.e. they start with 0).  Any
+undimensioned arrays will receive 10 elements by default (so the 
+valid elements number 0 to 9). 
+
+Line labels can use alphanumeric characters and the underscore symbol,
+but cannot start with a number.  Labels must end with a colon.  When
+referring to a line label, the colon may be omitted.  If a GOTO is
+made to a label that does not exist, the program will compile, but at
+runtime if the GOTO is encountered then the program will enter an 
+endless loop searching for the missing label.  There is no limit on 
+the number of labels, but each one uses one BF memory cell.  Certain
+statements (for example, "WHILE") will automatically create and use
+labels. 
+
+With an 8-bit interpreter there can be a maximum of 256 GOSUB
+statements.  A compile warning will be generated if this number is 
+exceeded.
+
+Numbers can be given in decimal (0 to 255) or hexadecimal (&H0 to
+&HFF).
+
+Expressions are made up of exprerssion elements and are evaluated
+using standard algebraic precedence rules.
+
+
+Command                 Details
+-------                 ----------
+                        blank line
+'comment                comment
+:                       command separator
+label:                  label
+? [list]                PRINT shorthand, see Print List Elements below
+var=expr                variable assign
+array(expr)=expr        array element assign
+BEEP                    prints ASCII character 7 (BEL)
+BF                      raw BF commands, @var for auto var. position
+CLS                     clear the screen (ANSI)
+COLOR expr              0:reset to normal, 1:bold, 5:blink,
+                        30-37:foreground, 40-47:background (ANSI)
+DIM var                 no longer necessary with the -O2 option
+DIM array(elements)     
+DO
+DO UNTIL expr
+DO WHILE expr
+ELSE
+END                     exit program
+END IF
+EXIT DO
+EXIT FOR
+FOR var=expr TO expr2
+FOR array(expr)=expr TO expr2
+GOSUB label
+GOTO label
+IF expr THEN
+IF expr THEN EXIT DO
+IF expr THEN EXIT FOR
+IF expr THEN GOTO label
+INPUT var               decimal input to variable
+INPUT array(expr)       decimal input to array element
+LET var=expr            old style variable assign
+LET array(expr)=expr    old style array element assign
+LOCATE expr,expr        row (1-24), column (1-80) (ANSI)
+LOOP
+LOOP UNTIL expr
+LOOP WHILE expr
+NEXT expr
+PRINT [list]            see Print List Elements below
+RANDOMIZE KEY           select random number seed from keyboard
+REM comment             old style comment
+RETURN
+STOP                    exit program
+SWAP var1,var2
+SYSTEM                  exit program
+WEND                    LOOP
+WHILE expr              DO WHILE expr
+
+
+Expression Elements
+-------------------
+#, &H#                  number
+( )                     parenthesis
+var                     variable
+INKEY                   returns ASC(INPUT$(1,1))
+RND                     returns pseudorandom # 0-255 (period 65536) 
+array(expr)             array element
+NOT(expr)               returns 255-expr
+expr1+expr2             addition
+expr1-expr2             
+expr1*expr2             
+expr1/expr2             division by 0 will result in an infinite loop
+expr1=expr2             if expr1 = expr2 then 255 else 0
+expr1<>expr2            if expr1 <> expr2 then 255 else 0
+expr1<expr2             if expr1 < expr2 then 255 else 0
+expr1<=expr2            if expr1 <= expr2 then 255 else 0
+expr1>expr2             if expr1 > expr2 then 255 else 0
+expr1>=expr2            if expr1 >= expr2 then 255 else 0
+expr1 AND expr2         if expr1<>0 and expr2<>0 then 255 else 0
+expr1 OR expr2          if expr1<>0 or expr2<>0 then 255 else 0
+
+
+Print List Elements
+-------------------
+;                       print or join strings without a newline
+expr                    decimal value
+"text"                  string literal: only uses ASCII 15-126          
+CHR$(expr)              ASCII character
+SPACE$(expr)            print expr number of spaces
+STRING$(expr1, expr2)   print expr1 number of ASCII expr2
+
+
+Future Commands?
+----------------
+better GOSUB/RETURN?
+IF expr THEN command
+FOR...STEP expr
+RANDOMIZE #
+SELECT CASE expr
+CASE expr
+CASE ELSE
+END SELECT
+EXIT SELECT
+DATA #
+READ var|array
+RESTORE
+
+
+Future Expression Elements?
+---------------------------
+-expr
+
+
+Future Print List Elements?
+---------------------------
+STRING$(expr,"a")
+
+
+Memory layout  Used for
+-------------  --------
+Q      1 byte  Quit? (0=yes, 1=no) 
+G      1 byte  Goto mode? (0=yes, 1=no)
+T      1 byte  Goto temp
+0-6    7 bytes Misc temp
+
+
+Known Problems
+--------------
+* INPUT acts strangely on *nix systems
+* "PRINT var" only works with 8-bit cells
+* -O3 causes problems (still debugging this)
+* GOSUB/RETURN is very slow
+
+
+Version History
+---------------
+1.41    29 Jun 2005
+* FOR...NEXT code rewritten, speed/size improvements and
+  "FOR var = 0 TO 255" now works! [Jon]
+* Instances of "#" changed to "(hash)" in debug output to 
+  prevent accidental breakpoints [Jon]
+
+1.40    21 Mar 2005
+* Added -w option [Jon]
+* REM comments show up in debug mode [Jon]
+* Modified -o option so that the "-o" is optional [Jon]
+* STOP statement now prints "Stopped" [Jon]
+* Reworked labels for more speed [Jeff]
+* The number of labels is now limited only by available memory [Jeff]
+* ONGOTO removed, it is not supported by the new labels [Jeff]
+* Code cleanup and fixes [Jeff]
+* Changed -w to wrap debug output too [Jeff]
+* Fixed bug that allowed SYSTEM to be misused (ex: SYSTEM IF) [Jeff]
+* Ported over the better BFASM array code [Jeff]
+* Added optimization levels.  -O2=default 
+* Added -O2, rearranges variables for smaller and more efficient code [Jeff] 
+* Replaced high/low add-to loops with straight +/-.  Smaller! [Jeff]
+* Numerical constants in expressions can now be optimized [Jeff]
+* Added "+" and "-" numerical constant optimizations [Jeff]
+* Fixed bug that allowed statements such as "A=()" [Jeff]
+* Added -O3, assignments skip a temp variable.  Code is larger, 
+  but should be slightly faster on optimizing interpreters (BROKEN!) [Jeff] 
+* Implemented new GOSUB and RETURN, very slow :( [Jeff]
+
+1.30    30 Oct 2003
+* Added -c option for CR LF = newline (LF now the default)
+* New commands: RANDOMIZE KEY
+* Modified commands: INPUT (as decimal), BF
+* New expressions: INKEY, RND (uses N=(31821*N+13849)%65536)
+
+1.20    23 Oct 2003
+* New commands: BF (for raw BF commands), ?, WHILE, WEND, SYSTEM, LET,
+  STOP, FOR, NEXT, EXIT FOR, IF...EXIT FOR
+* Upgraded L# labels to free text labels
+* Rewrote expr1<expr2 to fix multiple bugs 
+* New expressions: expr1<>expr2, expr1>expr2, expr1>=expr2,
+  expr1<=expr2, expr1/expr2
+* PRINT now supports ; and multiple expressions per line
+* Updated CLS, COLOR, and LOCATE to use the new ; syntax
+* Only outputs pre() and post() code when needed
+
+1.10    16 Oct 2003
+* New commands: IF...THEN, ELSE, END IF
+* New expressions: expr1 OR expr2, expr1 AND expr2 
+
+1.00    15 Oct 2003
+* Ported compiler from Basic to Java, major rewrite of some parts
+* Added algebraic expression parser
+* Updated commands to use the expression parser
+* New commands: DO [WHILE | UNTIL], EXIT DO, LOOP [WHILE | UNTIL],
+  IF...EXIT DO, GOSUB, RETURN, PRINT CHR$, PRINT num, COLOR, LOCATE
+  INPUT array
+* New expression: expr1*expr2
+* Improved debug output line wrapping
+* Removed V1="a" expression
+
+0.90    23 Sep 2003
+* Fixed label bug affecting PRINT
+* Fixed PRINT parsing bug
+* Fixed calculation parsing bug that ignored certain illegal
+  operators
+* IP starts at 1 (instead of 255) for faster exit
+* Not released
+
+0.80    20 Sep 2003
+* Fixed label bug that affected GOTO and IF ... THEN GOTO
+* Added optional debug output
+
+0.70    14 Mar 2003
+* Major rewrite, no longer forced to use certain variables
+* New commands: BEEP, CLS, DIM, ONGOTO, PRINT, PRINT #, SWAP
+* New calculations: Almost everything is new or improved upon.
+
+0.60    12 Mar 2003
+* Not released
+
+0.50    11 Mar 2003
+* Initial release
+* Programmed using QuickBasic Extended 7.0
