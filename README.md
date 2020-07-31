@@ -8,15 +8,11 @@ Currently, I only made very minor changes to the original code (starting from ve
 ## Usage
 Unzip the `.zip` release file. It includes `bfbasic.jar` which is an executable Java JAR that contains the BFBASIC compiler.
 
-The compiler can be executed with (assuming Java is in your execution path):
+The .zip file contains also batch and shell files for Windows an Unix to execute the compiler directly (assuming Java is in your execution path) with:
 
 ```
-java -jar bfbasic.jar <parameters>
-```
+bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
 
-Where `<parameters>` are:
-
-```
     -c           Treat newline as CRLF, default: LF
     -d           Debug output
     -dd          Verbose debug output
@@ -29,8 +25,4 @@ Where `<parameters>` are:
     -?           Display usage information
 ```
 
-The .zip file contains also batch and shell files for Windows an Unix to execute the compiler directly with:
-
-```
-bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
-```
+Please notce that you need [Java](https://java.com/en/download/) installed on your machine in order to run BFBASIC.
