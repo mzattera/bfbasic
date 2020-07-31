@@ -1,7 +1,9 @@
 # bfbasic
-This is a por to Eclipse and GitHub of [BFBASIC](https://esolangs.org/wiki/BFBASIC).
+This is a port to Eclipse and GitHub of [BFBASIC](https://esolangs.org/wiki/BFBASIC).
 
 I created this repository because the original project on SourceForge seems to be closed and its [CVS repository](http://brainfuck.cvs.sourceforge.net/brainfuck/) being available only in read-only mode.
+
+Currently, I only made very minor changes to the original code (starting from version 1.50 rc3).
 
 ## Usage
 Unzip the `.zip` release file. It includes `bfbasic.jar` which is an executable Java JAR that contains the BFBASIC compiler.
@@ -27,7 +29,7 @@ Where `<parameters>` are:
     -?           Display usage information
 ```
 
-The .zip file contains also batch and shell files for Windows an Unix to execute the compiler directly:
+The .zip file contains also batch and shell files for Windows an Unix to execute the compiler directly with:
 
 ```
 bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
