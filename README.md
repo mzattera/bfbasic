@@ -8,7 +8,7 @@ Currently, I only made very minor changes to the original code (starting from ve
 ## Usage
 Unzip the `.zip` release file. It includes `bfbasic.jar` which is an executable Java JAR that contains the BFBASIC compiler.
 
-The .zip file contains also batch and shell files for Windows an Unix to execute the compiler directly (assuming Java is in your execution path) with:
+The .zip file contains also batch and shell files for Windows and \*nix to execute the compiler directly (assuming Java is in your execution path) with:
 
 ```
 bfbasic [-c] [-d[d[d]]] [-O#] [-t] [-w [#]] FILE[.bas] [[-o] FILE] [-?]
