@@ -1,13 +1,19 @@
-1. Update "Version History" in README file in Eclipse project with release notes.
+1. Write your code for new version. Please keep in mind that:
 
-2. Make sure your Eclipse project is synchronized with GitHub.
+   a. bfbasic.java has a static variable VERSION that contains current version of the compiler.
+   b. Comments on top of bfbasic.java describe version changes.
+      Add your changes here and make sure you copy them in README (see below).
+      
+2. Update "Version History" in README file in Eclipse project with release notes.
 
-3. Within Eclipse, go to File > Export > Java Runnable JAR File
-   
+3. Make sure your Eclipse project is synchronized with GitHub.
+
+4. Within Eclipse, go to File > Export > Java Runnable JAR File
+  
    Select run configuration bfbasic - bfbasic and a destination folder for the .jar file.
    Name the .jar file bfbasic.jar.
    
-4. Zip together:
+5. Zip together:
 
    a. the newly created bfbasic.jar
    b. Following files that can be found inside the main folder of the Java project:
@@ -17,5 +23,6 @@
       LICENSE
       README
       
-5. Create a new release in GitHub and upload the newly created .zip file as binaries for the release.
+6. Create a new release in GitHub and upload the newly created .zip file as binaries for the release.
+   Also, paste in the release description the changes you put in 1.b. and 2.
    

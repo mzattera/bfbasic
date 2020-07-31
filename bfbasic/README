@@ -7,6 +7,7 @@ Contributors (thanks!)
 ------------
 [Jeff]  Jeffry Johnston (bfbasic@kidsquid.com)         
 [Jon]   Jon Ripley (jon@jonripley.com)
+[Maxi]  Massimiliano Zattera (b2fjava@gmail.com)
 
 
 License
@@ -206,6 +207,10 @@ Known Problems
 
 Version History
 ---------------
+1.50    31 Jul 2020 [Maxi] (Release candidate 3)
+* Moved to Java SE 1.8 by using generics.
+  Code reformatted using Eclipse editor.
+  
 1.50    10 Jul 2005 [Jon] (Release candidate 2)
 * Fixed bug in CASE handling which prevented compiling
   on some implementations
